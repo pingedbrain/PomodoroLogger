@@ -66,11 +66,35 @@ module.exports = merge.smart(baseConfig, {
             {
                 test: /\.tsx?$/,
                 exclude: /node_modules/,
-                use: 'happypack/loader',
+                use: {
+                    loader: 'babel-loader',
+                    options: {
+                        cacheDirectory: true,
+                        babelrc: false,
+                        presets: [
+                            [
+                                '@babel/preset-env',
+                                {
+                                    targets: { browsers: 'last 2 versions ' },
+                                    modules: false
+                                }
+                            ],
+                            '@babel/preset-typescript',
+                            '@babel/preset-react'
+                        ],
+                        plugins: [
+                            '@babel/plugin-transform-runtime',
+                            [
+                                '@babel/plugin-proposal-class-properties',
+                                { loose: true }
+                            ]
+                        ]
+                    }
+                }
             },
             {
                 test: /\.scss$/,
-                loaders: ['style-loader', 'css-loader', 'sass-loader']
+                loaders: ['style-loader', 'css-loader', { loader: 'sass-loader', options: { implementation: require('sass') } }]
             },
             {
                 test: /\.css$/,
@@ -119,36 +143,6 @@ module.exports = merge.smart(baseConfig, {
         ]
     },
     plugins: [
-        new HappyPack({
-            loaders: [
-                {
-                    loader: 'babel-loader',
-                    options: {
-                        cacheDirectory: true,
-                        babelrc: false,
-                        presets: [
-                            [
-                                '@babel/preset-env',
-                                {
-                                    targets: { browsers: 'last 2 versions ' },
-                                    modules: false
-                                }
-                            ],
-                            '@babel/preset-typescript',
-                            '@babel/preset-react'
-                        ],
-                        plugins: [
-                            '@babel/plugin-transform-runtime',
-                            [
-                                '@babel/plugin-proposal-class-properties',
-                                { loose: true }
-                            ]
-                        ]
-
-                    }
-                }
-            ]
-        }),
         new ForkTsCheckerWebpackPlugin({
             reportFiles: ['src/renderer/**/*']
         }),
