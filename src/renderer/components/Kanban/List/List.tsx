@@ -9,6 +9,7 @@ import { Button, Dropdown, Icon, Input, Menu, message, Popconfirm, Tooltip } fro
 import { KanbanActionTypes } from '../action';
 import { CardsState } from '../Card/action';
 import { List as ListType } from '../type';
+import { Epic } from '../epic-type';
 import { mergeRefs } from '../../../utils';
 import { throttle, debounce } from 'lodash';
 
@@ -153,11 +154,15 @@ export interface InputProps {
     boardId: string;
     focused?: boolean;
     done?: boolean;
+    epicsMap?: { [epicId: string]: Epic };
+    epicFilterId?: string;
 }
 
 interface Props extends ListType, InputProps, ListActionTypes, KanbanActionTypes {
     searchReg?: string;
     cardsState: CardsState;
+    epicFilterId?: string;
+    epicsMap?: { [epicId: string]: Epic };
 }
 
 export const List: FC<Props> = React.memo((props: Props) => {
@@ -205,7 +210,17 @@ export const List: FC<Props> = React.memo((props: Props) => {
         return visibleCards_;
     }, [props._id, searchReg, props.cardsState, cards]);
 
-    const filteredCards = visibleCards || props.cards || [];
+    // Apply epic filter
+    const epicFilteredCards = React.useMemo(() => {
+        const base = visibleCards || props.cards || [];
+        if (!props.epicFilterId) return base;
+        return base.filter((cardId) => {
+            const card = cardsState[cardId];
+            return card && card.epicId === props.epicFilterId;
+        });
+    }, [visibleCards, props.cards, props.epicFilterId, cardsState]);
+
+    const filteredCards = epicFilteredCards;
     const [estimatedTimeSum, actualTimeSum] = React.useMemo(
         () =>
             filteredCards.reduce(
@@ -376,6 +391,7 @@ export const List: FC<Props> = React.memo((props: Props) => {
                                                 listId={props.listId}
                                                 isDraggingOver={isDraggingOver}
                                                 searchReg={searchReg}
+                                                epicsMap={props.epicsMap}
                                             />
                                         ))}
                                         {provided.placeholder}

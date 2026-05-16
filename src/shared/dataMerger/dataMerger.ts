@@ -9,6 +9,8 @@ import {
     MoveInfo,
 } from '../../renderer/components/Kanban/type';
 import { PomodoroRecord } from '../../renderer/monitor/type';
+import { Epic } from '../../renderer/components/Kanban/epic-type';
+import { computeEpicAggregates } from '../../renderer/components/Kanban/epic-db';
 
 export interface SourceData {
     records: PomodoroRecord[];
@@ -153,6 +155,35 @@ export class DataMerger {
 
             board.relatedSessions = Array.from(sess);
         }
+    }
+
+    /**
+     * Recompute an epic's cached aggregate fields (estimatedHours, actualHours,
+     * pomodoroCount) from its cards and sessions.
+     *
+     * Mirror of setBoardInfo() but for individual epics. This is used when
+     * loading/merging data for reports — it does NOT persist to the DB.
+     *
+     * @param epic     The epic to update (not mutated — a new object is returned)
+     * @param cards    CardsState map (cardId → Card)
+     * @param sessions Session record map (sessionId → PomodoroRecord)
+     * @returns A new Epic object with updated cached fields
+     */
+    public setEpicInfo(
+        epic: Epic,
+        cards: {
+            [cardId: string]:
+                | { spentTimeInHour: { estimated: number }; sessionIds: string[] }
+                | undefined;
+        },
+        sessions: { [sessionId: string]: { spentTimeInHour: number } | undefined }
+    ): Epic {
+        const { estimatedHours, actualHours, pomodoroCount } = computeEpicAggregates(
+            epic.cardIds,
+            cards,
+            sessions
+        );
+        return { ...epic, estimatedHours, actualHours, pomodoroCount };
     }
 
     private setRecordMap(ans: SourceData) {

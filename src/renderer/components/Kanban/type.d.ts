@@ -10,6 +10,7 @@ export interface Card {
         actual: number;
     };
     createdTime?: number;
+    epicId?: string;
 }
 
 export interface AggInfo {

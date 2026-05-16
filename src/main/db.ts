@@ -2,7 +2,7 @@
 import nedb from 'nedb';
 import { dbPaths } from '../config';
 
-const { projectDB, sessionDB, settingDB, kanbanDB, cardsDB, listsDB, moveDB } = dbPaths;
+const { projectDB, sessionDB, settingDB, kanbanDB, cardsDB, listsDB, moveDB, epicPath } = dbPaths;
 export let DBs = {
     projectDB: new nedb({ filename: projectDB }),
     sessionDB: new nedb({ filename: sessionDB }),
@@ -11,6 +11,7 @@ export let DBs = {
     cardsDB: new nedb({ filename: cardsDB }),
     listsDB: new nedb({ filename: listsDB }),
     moveDB: new nedb({ filename: moveDB }),
+    epicPath: new nedb({ filename: epicPath }),
 };
 
 // Avoid nedb init error
@@ -59,6 +60,7 @@ export async function refreshDbs() {
         cardsDB: new nedb({ filename: cardsDB }),
         listsDB: new nedb({ filename: listsDB }),
         moveDB: new nedb({ filename: moveDB }),
+        epicPath: new nedb({ filename: epicPath }),
     };
 
     await loadDBs();

@@ -20,8 +20,9 @@ const addCard = createActionCreator(
         resolve({ _id, title, content, createdTime })
 );
 
-const renameCard = createActionCreator('[Card]RENAME', (resolve) => (_id: string, title: string) =>
-    resolve({ _id, title })
+const renameCard = createActionCreator(
+    '[Card]RENAME',
+    (resolve) => (_id: string, title: string) => resolve({ _id, title })
 );
 
 const setContent = createActionCreator(
@@ -44,12 +45,24 @@ const addActualTime = createActionCreator(
     (resolve) => (_id: string, plus: number) => resolve({ _id, plus })
 );
 
-const deleteCard = createActionCreator('[Card]DELETE_CARD', (resolve) => (_id: string) =>
-    resolve({ _id })
+const deleteCard = createActionCreator(
+    '[Card]DELETE_CARD',
+    (resolve) => (_id: string) => resolve({ _id })
 );
 
-const setCards = createActionCreator('[Card]SET_CARDS', (resolve) => (cards: CardsState) =>
-    resolve(cards)
+const setEpicId = createActionCreator(
+    '[Card]SET_EPIC_ID',
+    (resolve) => (_id: string, epicId: string) => resolve({ _id, epicId })
+);
+
+const removeEpicId = createActionCreator(
+    '[Card]REMOVE_EPIC_ID',
+    (resolve) => (_id: string) => resolve({ _id })
+);
+
+const setCards = createActionCreator(
+    '[Card]SET_CARDS',
+    (resolve) => (cards: CardsState) => resolve(cards)
 );
 
 export const actions = {
@@ -87,36 +100,43 @@ export const actions = {
         dispatch(deleteCard(_id));
         await db.remove({ _id });
     },
-    onTimerFinished: (_id: string, sessionId: string, spentTimeInHour: number) => async (
-        dispatch: Dispatch
-    ) => {
-        dispatch(addSession(_id, sessionId, spentTimeInHour));
-        await db.update(
-            { _id },
-            {
-                $push: { sessionIds: sessionId },
-                $inc: { 'spentTimeInHour.actual': spentTimeInHour },
-            }
-        );
+    onTimerFinished:
+        (_id: string, sessionId: string, spentTimeInHour: number) => async (dispatch: Dispatch) => {
+            dispatch(addSession(_id, sessionId, spentTimeInHour));
+            await db.update(
+                { _id },
+                {
+                    $push: { sessionIds: sessionId },
+                    $inc: { 'spentTimeInHour.actual': spentTimeInHour },
+                }
+            );
+        },
+    setEpicId: (_id: string, epicId: string) => async (dispatch: Dispatch) => {
+        dispatch(setEpicId(_id, epicId));
+        await db.update({ _id }, { $set: { epicId } });
     },
-    addCard: (_id: string, listId: string, title: string, content: string = '') => async (
-        dispatch: Dispatch
-    ) => {
-        const now = +new Date();
-        dispatch(addCard(_id, title, content, now));
-        await listActions.addCardById(listId, _id)(dispatch);
-        await db.insert({
-            _id,
-            title,
-            content,
-            sessionIds: [],
-            spentTimeInHour: {
-                estimated: 0,
-                actual: 0,
-            },
-            createdTime: now,
-        } as Card);
+    removeEpicId: (_id: string) => async (dispatch: Dispatch) => {
+        dispatch(removeEpicId(_id));
+        await db.update({ _id }, { $unset: { epicId: true } });
     },
+    addCard:
+        (_id: string, listId: string, title: string, content: string = '') =>
+        async (dispatch: Dispatch) => {
+            const now = +new Date();
+            dispatch(addCard(_id, title, content, now));
+            await listActions.addCardById(listId, _id)(dispatch);
+            await db.insert({
+                _id,
+                title,
+                content,
+                sessionIds: [],
+                spentTimeInHour: {
+                    estimated: 0,
+                    actual: 0,
+                },
+                createdTime: now,
+            } as Card);
+        },
 };
 
 export const cardReducer = createReducer<CardsState, any>({}, (handle) => [
@@ -192,6 +212,26 @@ export const cardReducer = createReducer<CardsState, any>({}, (handle) => [
     }),
 
     handle(setCards, (state, { payload }) => payload),
+    handle(setEpicId, (state, { payload: { _id, epicId } }) => {
+        return {
+            ...state,
+            [_id]: {
+                ...state[_id],
+                epicId,
+            },
+        };
+    }),
+    handle(removeEpicId, (state, { payload: { _id } }) => {
+        const { [_id]: card, ...rest } = state;
+        if (!card) return state;
+        return {
+            ...state,
+            [_id]: {
+                ...card,
+                epicId: undefined,
+            },
+        };
+    }),
     handle(addActualTime, (state, { payload: { _id, plus } }) => {
         return {
             ...state,

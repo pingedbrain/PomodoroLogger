@@ -9,6 +9,7 @@ import { lang } from '../../../../lang/en';
 import { DistractingRow } from '../../Timer/action';
 import { workers } from '../../../workers';
 import { AggInfo, KanbanBoard } from '../type';
+import { recalculateEpicStats } from '../epic-db';
 
 const db = workers.dbWorkers.kanbanDB;
 
@@ -28,14 +29,16 @@ export type KanbanBoardState = { [_id: string]: KanbanBoard };
 
 const addBoard = createActionCreator(
     '[Board]ADD',
-    (resolve) => (
-        _id: string,
-        name: string,
-        description: string,
-        lists: string[],
-        focusedList: string,
-        doneList: string
-    ) => resolve({ _id, name, description, lists, focusedList, doneList })
+    (resolve) =>
+        (
+            _id: string,
+            name: string,
+            description: string,
+            lists: string[],
+            focusedList: string,
+            doneList: string
+        ) =>
+            resolve({ _id, name, description, lists, focusedList, doneList })
 );
 
 const setBoardMap = createActionCreator(
@@ -49,18 +52,21 @@ const moveList = createActionCreator(
         resolve({ _id, fromIndex, toIndex })
 );
 
-const renameBoard = createActionCreator('[Board]RENAME', (resolve) => (_id, name) =>
-    resolve({ _id, name })
+const renameBoard = createActionCreator(
+    '[Board]RENAME',
+    (resolve) => (_id, name) => resolve({ _id, name })
 );
 
-const addList = createActionCreator('[Board]ADD_LIST', (resolve) => (_id, listId) =>
-    resolve({ _id, cardId: listId })
+const addList = createActionCreator(
+    '[Board]ADD_LIST',
+    (resolve) => (_id, listId) => resolve({ _id, cardId: listId })
 );
 
 const deleteBoard = createActionCreator('[Board]DEL_BOARD', (resolve) => (_id) => resolve({ _id }));
 
-const deleteList = createActionCreator('[Board]DEL_LIST', (resolve) => (_id, listId) =>
-    resolve({ _id, listId })
+const deleteList = createActionCreator(
+    '[Board]DEL_LIST',
+    (resolve) => (_id, listId) => resolve({ _id, listId })
 );
 
 const setLastVisitTime = createActionCreator(
@@ -80,8 +86,9 @@ const editBoard = createActionCreator(
         resolve({ _id, name, description })
 );
 
-const setPin = createActionCreator('[Board]SET_PIN', (resolve) => (_id: string, pin: boolean) =>
-    resolve({ _id, pin })
+const setPin = createActionCreator(
+    '[Board]SET_PIN',
+    (resolve) => (_id: string, pin: boolean) => resolve({ _id, pin })
 );
 
 const updateAggInfo = createActionCreator(
@@ -255,60 +262,79 @@ export const actions = {
         await db.update({ _id }, { $pull: { lists: listId } });
     },
 
-    addBoard: (_id: string, name: string, description: string = '') => async (
-        dispatch: Dispatch
-    ) => {
-        const lists = [];
-        for (const name of ['TODO', 'In Progress', 'Done']) {
-            const listId = shortid.generate();
-            await listActions.addList(listId, name)(dispatch);
-            lists.push(listId);
-        }
-        dispatch(addBoard(_id, name, description, lists, lists[1], lists[2]));
+    addBoard:
+        (_id: string, name: string, description: string = '') =>
+        async (dispatch: Dispatch) => {
+            const lists = [];
+            for (const name of ['TODO', 'In Progress', 'Done']) {
+                const listId = shortid.generate();
+                await listActions.addList(listId, name)(dispatch);
+                lists.push(listId);
+            }
+            dispatch(addBoard(_id, name, description, lists, lists[1], lists[2]));
 
-        const cardId = shortid.generate();
-        await cardActions.addCard(cardId, lists[0], lang.welcome, lang.demoCardContent)(dispatch);
-        await db.insert({
-            ...defaultBoard,
-            _id,
-            description,
-            name,
-            lists,
-            lastVisitTime: new Date().getTime(),
-            focusedList: lists[1],
-            doneList: lists[2],
-        } as KanbanBoard);
-    },
+            const cardId = shortid.generate();
+            await cardActions.addCard(
+                cardId,
+                lists[0],
+                lang.welcome,
+                lang.demoCardContent
+            )(dispatch);
+            await db.insert({
+                ...defaultBoard,
+                _id,
+                description,
+                name,
+                lists,
+                lastVisitTime: new Date().getTime(),
+                focusedList: lists[1],
+                doneList: lists[2],
+            } as KanbanBoard);
+        },
 
     setLastVisitTime: (_id: string, time: number) => async (dispatch: Dispatch) => {
         dispatch(setLastVisitTime(_id, time));
         await db.update({ _id }, { $set: { lastVisitTime: time } });
     },
 
-    moveCard: (fromListId: string, toListId: string, fromIndex: number, toIndex: number) => async (
-        dispatch: Dispatch
-    ) => {
-        await listActions.moveCard(fromListId, toListId, fromIndex, toIndex)(dispatch);
-    },
+    moveCard:
+        (fromListId: string, toListId: string, fromIndex: number, toIndex: number) =>
+        async (dispatch: Dispatch) => {
+            await listActions.moveCard(fromListId, toListId, fromIndex, toIndex)(dispatch);
+        },
 
-    onTimerFinished: (
-        _id: string,
-        sessionId: string,
-        timeSpent: number,
-        cardIds: string[]
-    ) => async (dispatch: Dispatch) => {
-        dispatch(onTimerFinished(_id, sessionId, timeSpent));
-        dispatch(historyActions.setExpiringKey(_id));
-        await db.update(
-            { _id },
-            { $push: { relatedSessions: sessionId }, $inc: { spentHours: timeSpent } }
-        );
-        for (const cardId of cardIds) {
-            await cardActions.onTimerFinished(cardId, sessionId, timeSpent)(dispatch);
-        }
+    onTimerFinished:
+        (_id: string, sessionId: string, timeSpent: number, cardIds: string[]) =>
+        async (dispatch: Dispatch) => {
+            dispatch(onTimerFinished(_id, sessionId, timeSpent));
+            dispatch(historyActions.setExpiringKey(_id));
+            await db.update(
+                { _id },
+                { $push: { relatedSessions: sessionId }, $inc: { spentHours: timeSpent } }
+            );
+            const affectedEpicIds = new Set<string>();
+            for (const cardId of cardIds) {
+                await cardActions.onTimerFinished(cardId, sessionId, timeSpent)(dispatch);
+                // Check if card belongs to an epic (read from DB after update)
+                try {
+                    const card = await workers.dbWorkers.cardsDB.findOne({ _id: cardId });
+                    if (card?.epicId) {
+                        affectedEpicIds.add(card.epicId);
+                    }
+                } catch {
+                    // card lookup failed — skip epic recalc for this card
+                }
+            }
 
-        await actions.setLastVisitTime(_id, new Date().getTime())(dispatch);
-    },
+            // Recalculate stats for each affected epic
+            for (const epicId of affectedEpicIds) {
+                await recalculateEpicStats(epicId).catch((err) =>
+                    console.error(`Epic recalc failed for ${epicId}:`, err)
+                );
+            }
+
+            await actions.setLastVisitTime(_id, new Date().getTime())(dispatch);
+        },
 
     editBoard: (_id: string, name: string, description: string) => async (dispatch: Dispatch) => {
         dispatch(editBoard(_id, name, description));
@@ -320,12 +346,11 @@ export const actions = {
         await db.update({ _id }, { $set: { pin } });
     },
 
-    setDistractionList: (_id: string, distractionList?: DistractingRow[]) => async (
-        dispatch: Dispatch
-    ) => {
-        dispatch(setDistractionList(_id, distractionList));
-        await db.update({ _id }, { $set: { distractionList } });
-    },
+    setDistractionList:
+        (_id: string, distractionList?: DistractingRow[]) => async (dispatch: Dispatch) => {
+            dispatch(setDistractionList(_id, distractionList));
+            await db.update({ _id }, { $set: { distractionList } });
+        },
 
     setCollapsed: (_id: string, collapsed: boolean) => async (dispatch: Dispatch) => {
         dispatch(setCollapsed(_id, collapsed));

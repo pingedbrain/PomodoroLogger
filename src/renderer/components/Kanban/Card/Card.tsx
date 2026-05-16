@@ -3,17 +3,18 @@ import React, { FC } from 'react';
 import { CardActionTypes } from './action';
 import { KanbanActionTypes } from '../action';
 import styled from 'styled-components';
-import { Divider } from 'antd';
+import { Divider, Dropdown, Icon, Menu, Tag } from 'antd';
 import formatMarkdown from './formatMarkdown';
 import { TimeBadge } from '../../../../components/Visualization/Badge/Badge';
 import { BadgeHolder } from '../style/Badge';
 import { Markdown } from '../style/Markdown';
 import { PomodoroDot } from '../../Visualization/PomodoroDot';
 import { Card as CardType } from '../type';
+import { Epic } from '../epic-type';
+import { getEpicColor } from '../Epic/EpicPanel';
 import { matchParent } from '../../../utils';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../../reducers';
-import { check } from 'prettier';
 
 /**
  * If you're using z-index, make sure the element has a defined position attribute or it won't work.
@@ -51,6 +52,12 @@ const CardContent = styled.div`
     }
 `;
 
+const EpicBadgeRow = styled.div`
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 2px;
+`;
+
 export interface InputProps {
     cardId: string;
     index: number;
@@ -58,6 +65,7 @@ export interface InputProps {
     boardId: string;
     isDraggingOver: boolean;
     searchReg?: string;
+    epicsMap?: { [epicId: string]: Epic };
 }
 
 interface Props extends CardType, InputProps, CardActionTypes, KanbanActionTypes {
@@ -75,6 +83,11 @@ export const Card: FC<Props> = React.memo((props: Props) => {
             const target = e.nativeEvent.target as HTMLElement;
             const tag = matchParent(target, '.pl-tag');
             const checkbox = matchParent(target, '[type="checkbox"]');
+            const epicBadge = matchParent(target, '.card-epic-badge');
+            if (epicBadge) {
+                // Epic badge click is handled by Dropdown, ignore here
+                return;
+            }
             if (tag && tag.textContent) {
                 props.setSearchReg(tag.textContent);
                 e.stopPropagation();
@@ -148,6 +161,59 @@ export const Card: FC<Props> = React.memo((props: Props) => {
         return newContent;
     }, [props.content, props.searchReg]);
 
+    // ── Epic badge (3.4) ──────────────────────────────────────────────
+    const epic = props.epicId && props.epicsMap ? props.epicsMap[props.epicId] : undefined;
+    const epics = props.epicsMap ? Object.values(props.epicsMap) : [];
+    const epicIndex = epic ? epics.findIndex((e) => e._id === epic._id) : -1;
+    const epicColor = epic ? getEpicColor(epicIndex >= 0 ? epicIndex : 0) : undefined;
+
+    // ── Epic context menu (3.5) ───────────────────────────────────────
+    const epicMenu = React.useMemo(() => {
+        if (props.epicId) {
+            // Card already has an epic — show "Remove from Epic"
+            return (
+                <Menu
+                    onClick={(param) => {
+                        if (param.key === 'remove') {
+                            props.removeEpicId(props._id);
+                        }
+                    }}
+                >
+                    <Menu.Item key="remove">
+                        <Icon type="disconnect" /> Remove from Epic
+                    </Menu.Item>
+                    {epic && (
+                        <Menu.Item key="epic-name" disabled={true}>
+                            <Tag color={epicColor}>{epic.name}</Tag>
+                        </Menu.Item>
+                    )}
+                </Menu>
+            );
+        }
+
+        // Card has no epic — show "Assign to Epic" submenu
+        if (epics.length === 0) return undefined;
+
+        return (
+            <Menu>
+                <Menu.SubMenu
+                    key="assign"
+                    title={
+                        <span>
+                            <Icon type="link" /> Assign to Epic
+                        </span>
+                    }
+                >
+                    {epics.map((e, i) => (
+                        <Menu.Item key={e._id} onClick={() => props.setEpicId(props._id, e._id)}>
+                            <Tag color={getEpicColor(i)}>{e.name}</Tag>
+                        </Menu.Item>
+                    ))}
+                </Menu.SubMenu>
+            </Menu>
+        );
+    }, [props.epicId, props._id, epics, epic, epicColor]);
+
     return (
         <>
             <Draggable draggableId={_id} index={index}>
@@ -164,6 +230,36 @@ export const Card: FC<Props> = React.memo((props: Props) => {
                                     (snapshot.isDragging ? 'is-dragging' : undefined)
                                 }
                             >
+                                {props.epicsMap && Object.keys(props.epicsMap).length > 0 ? (
+                                    <Dropdown overlay={epicMenu || <Menu />} trigger={['click']}>
+                                        <EpicBadgeRow className="card-epic-badge">
+                                            {epic && epicColor ? (
+                                                <Tag
+                                                    color={epicColor}
+                                                    style={{ cursor: 'pointer', margin: 0 }}
+                                                >
+                                                    {epic.name}
+                                                </Tag>
+                                            ) : !props.epicId ? (
+                                                <Tag
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        margin: 0,
+                                                        borderStyle: 'dashed',
+                                                    }}
+                                                >
+                                                    <Icon type="plus" /> Epic
+                                                </Tag>
+                                            ) : null}
+                                        </EpicBadgeRow>
+                                    </Dropdown>
+                                ) : epic && epicColor ? (
+                                    <EpicBadgeRow>
+                                        <Tag color={epicColor} style={{ margin: 0 }}>
+                                            {epic.name}
+                                        </Tag>
+                                    </EpicBadgeRow>
+                                ) : null}
                                 {props.collapsed ? (
                                     <CardContent>
                                         <h3

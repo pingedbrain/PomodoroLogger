@@ -6,11 +6,8 @@ import { genMapDispatchToProp } from '../../../utils';
 
 const mapStateToProps = (state: RootState, props: InputProps) => {
     const board = state.kanban.boards[props.boardId];
-    return { ...board };
+    return { ...board, cards: state.kanban.cards };
 };
 
 const mapDispatchToProps = genMapDispatchToProp<BoardActionTypes>(actions);
-export default connect(
-    mapStateToProps,
-    mapDispatchToProps
-)(Board);
+export default connect(mapStateToProps, mapDispatchToProps)(Board);

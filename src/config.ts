@@ -36,6 +36,7 @@ export const dbPaths = {
     cardsDB: join(dbBaseDir, 'cards.nedb'),
     listsDB: join(dbBaseDir, 'lists.nedb'),
     moveDB: join(dbBaseDir, 'moveCard.nedb'),
+    epicPath: join(dbBaseDir, 'epics.nedb'),
 };
 
 if (process.env.NODE_ENV === 'test') {
