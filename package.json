@@ -12,6 +12,7 @@
         "start-main-dev": "webpack --config webpack.main.config.js",
         "start-electron": "electron .",
         "start": "concurrently \"npm:start-main-dev\" \"npm:start-renderer-dev\"",
+        "start:dev": "concurrently --kill-others \"npm:start-main-dev\" \"npm:start-renderer-dev\" \"npm:start-electron\"",
         "prestart:prod": "npm run build",
         "start:prod": "electron .",
         "lint": "tslint '{src,test,mocks}/**/*.{ts,tsx}' --project ./tsconfig.json",
